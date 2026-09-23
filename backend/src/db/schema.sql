@@ -24,6 +24,12 @@ create table if not exists photo_sessions (
   id uuid primary key default gen_random_uuid(),
   photographer_id text not null,
   document_name text,
+  -- Regroupe les photos ouvertes en même temps (même lot), pour distinguer
+  -- plus tard le réglage de base commun au lot des retouches individuelles.
+  batch_id text,
+  -- 'photoshop' ou 'lightroom' : les deux plugins envoient un format
+  -- différent (journal d'événements vs réglages finaux), utile pour filtrer.
+  source text default 'photoshop',
   captured_at timestamptz,
   raw_events jsonb,
   status text default 'raw',
@@ -34,6 +40,8 @@ create table if not exists photo_edits (
   id uuid primary key default gen_random_uuid(),
   session_id uuid references photo_sessions(id),
   photographer_id text not null,
+  batch_id text,
+  source text default 'photoshop',
   -- Caractéristiques de l'image (luminosité, teinte, visage/peau...).
   -- Reste NULL tant que le plugin n'envoie pas d'aperçu image au backend
   -- (voir CLAUDE.md, "reste à faire").
@@ -46,8 +54,17 @@ create table if not exists photo_edits (
   created_at timestamptz default now()
 );
 
+-- ALTER en plus des CREATE ci-dessus : permet de re-coller/exécuter tout ce
+-- fichier sans erreur même si les tables existaient déjà avant l'ajout de
+-- batch_id (CREATE TABLE IF NOT EXISTS ne modifie pas une table existante).
+alter table photo_sessions add column if not exists batch_id text;
+alter table photo_edits add column if not exists batch_id text;
+alter table photo_sessions add column if not exists source text default 'photoshop';
+alter table photo_edits add column if not exists source text default 'photoshop';
+
 create index if not exists idx_photo_edits_photographer on photo_edits(photographer_id);
 create index if not exists idx_photo_sessions_photographer on photo_sessions(photographer_id);
+create index if not exists idx_photo_edits_batch on photo_edits(batch_id);
 
 -- Boîte de réception centrale : tout ce qui remonte des plugins installés
 -- chez les photographes testeurs (bug signalé, plainte, suggestion, ou

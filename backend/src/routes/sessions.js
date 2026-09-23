@@ -1,30 +1,59 @@
 const express = require("express");
 const router = express.Router();
 const { supabase } = require("../db/supabaseClient");
-const { parseSessionEvents, isValidationEvent } = require("../services/parser");
+const { parseSessionEvents, isValidationEvent, parseLightroomSettings } = require("../services/parser");
 
-// Reçoit une session brute envoyée par le plugin Photoshop après un
-// enregistrement (démarrer / retoucher / arrêter).
+// Reçoit une photo capturée par un des deux plugins (Photoshop ou
+// Lightroom), envoyée automatiquement dès que cette photo est
+// exportée/sauvegardée/fermée. batchId regroupe les photos traitées
+// ensemble (même lot), pour pouvoir plus tard distinguer le réglage de
+// base appliqué à tout le lot des retouches individuelles propres à
+// chaque photo.
+//
+// source distingue le format reçu :
+// - "photoshop" (ou absent, pour compatibilité) : `events`, un journal brut
+//   d'actions Photoshop (batchPlay).
+// - "lightroom" : `developSettings`, l'état final des réglages de
+//   développement de la photo au moment de l'export (Lightroom ne fournit
+//   pas de journal d'événements comme Photoshop).
 router.post("/", async (req, res) => {
-  const { photographerId, documentName, capturedAt, events } = req.body;
+  const { photographerId, documentName, batchId, capturedAt, source, events, developSettings } = req.body;
 
   if (!photographerId) {
     return res.status(400).json({ error: "photographerId manquant" });
   }
-  if (!Array.isArray(events) || events.length === 0) {
-    return res.status(400).json({ error: "events manquant ou vide" });
-  }
 
-  const validated = events.some(isValidationEvent);
-  const adjustments = parseSessionEvents(events);
+  let adjustments;
+  let validated;
+  let rawPayload;
+
+  if (source === "lightroom") {
+    if (!developSettings || typeof developSettings !== "object") {
+      return res.status(400).json({ error: "developSettings manquant" });
+    }
+    adjustments = parseLightroomSettings(developSettings);
+    // Un export Lightroom est toujours le signal de fin pour cette photo
+    // (pas d'équivalent ambigu à "save" en cours de route comme Photoshop).
+    validated = true;
+    rawPayload = developSettings;
+  } else {
+    if (!Array.isArray(events) || events.length === 0) {
+      return res.status(400).json({ error: "events manquant ou vide" });
+    }
+    validated = events.some(isValidationEvent);
+    adjustments = parseSessionEvents(events);
+    rawPayload = events;
+  }
 
   const { data, error } = await supabase
     .from("photo_sessions")
     .insert({
       photographer_id: photographerId,
       document_name: documentName || null,
+      batch_id: batchId || null,
+      source: source || "photoshop",
       captured_at: capturedAt || new Date().toISOString(),
-      raw_events: events,
+      raw_events: rawPayload,
       status: "parsed"
     })
     .select()
@@ -37,9 +66,11 @@ router.post("/", async (req, res) => {
   const { error: editError } = await supabase.from("photo_edits").insert({
     session_id: data.id,
     photographer_id: photographerId,
-    // Pas encore d'image_features ici : le plugin n'envoie pas (encore) un
-    // aperçu de la photo au backend, seulement les événements Photoshop.
-    // Voir CLAUDE.md, "reste à faire".
+    batch_id: batchId || null,
+    source: source || "photoshop",
+    // Pas encore d'image_features ici : ni le plugin Photoshop ni le
+    // plugin Lightroom n'envoient (encore) un aperçu pixel de la photo au
+    // backend. Voir CLAUDE.md, "reste à faire".
     image_features: null,
     adjustments,
     validated

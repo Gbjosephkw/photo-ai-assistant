@@ -6,11 +6,12 @@ Assistant IA qui apprend la façon dont un photographe retouche ses photos (tein
 grain, cadre, lumière, couleur, température) en observant son travail réel dans
 son logiciel habituel, puis qui peut, une fois autorisé, reproduire ces réglages
 lui-même dans ce même logiciel. Ce n'est pas un éditeur de photos concurrent : on
-pilote l'outil que le photographe utilise déjà (Photoshop via son API de script
-UXP, potentiellement Lightroom plus tard).
+pilote l'outil que le photographe utilise déjà.
 
-Produit à vendre (pas un projet perso). Premier cas d'usage envisagé : un
-photographe externe, pas encore confirmé/contacté à ce stade.
+Produit à vendre (pas un projet perso). Deux photographes contactés par
+Joseph, **les deux utilisent Lightroom** (23/09/2026) — d'où l'existence de
+`lightroom-plugin/` en plus de `plugin/` (Photoshop). Les deux plugins
+envoient vers le même backend.
 
 ## Modèle de fonctionnement choisi par Joseph : "mise à jour téléphone"
 
@@ -33,17 +34,63 @@ une fois le produit stabilisé avec les premiers testeurs, pas dès maintenant.
 
 ## Architecture (3 briques + 2 briques de fonctionnement produit)
 
-1. **Capture** (`plugin/`) — plugin Photoshop (UXP) qui enregistre chaque
-   action Photoshop pendant une session de retouche, détecte l'export/la
-   sauvegarde comme signal de validation, et envoie la session au backend.
+1. **Capture** (`plugin/`) — plugin Photoshop (UXP) qui enregistre en
+   permanence et automatiquement dès son chargement (aucun clic requis). Un
+   bouton "Pause" optionnel existe pour les cas où le photographe ne veut
+   pas être enregistré (test, retouche non représentative), mais n'est
+   jamais nécessaire pour l'usage normal — décision prise après que Joseph
+   a signalé que demander un clic par photo serait trop fastidieux pour un
+   photographe qui en traite des centaines par événement.
+
+   **Suivi par photo, pas par session globale** : un photographe ouvre
+   souvent tout un lot de photos d'un coup, leur applique un réglage de
+   base commun (preset), puis affine chaque photo individuellement, avant
+   d'exporter éventuellement tout le lot en une seule fois. Le plugin
+   maintient donc un buffer d'événements PAR DOCUMENT Photoshop (`Map` par
+   id de document, pas un seul tas global), avec un `batchId` commun aux
+   photos ouvertes à moins de 5 secondes d'écart. Chaque document est
+   envoyé au backend individuellement dès que SON export/sauvegarde/
+   fermeture est détecté(e), avec ce `batchId` attaché — ce qui permettra
+   plus tard (pas encore fait, voir "Reste à faire") de distinguer dans
+   `learner.js` le réglage de base partagé par tout le lot des retouches
+   propres à chaque photo. Un filet de sécurité (`setInterval`, toutes les
+   minutes) envoie aussi une photo restée inactive plus de 3 minutes, au
+   cas où un export groupé en un clic ne déclenche pas un événement par
+   photo comme on le suppose — **hypothèse non vérifiée, à confirmer en
+   premier avec un vrai Photoshop**, voir "Reste à faire".
+1bis. **Capture Lightroom** (`lightroom-plugin/PhotoAssistant.lrplugin/`) —
+   plugin Lightroom Classic (SDK Lua), déclaré comme "Export Filter"
+   (`LrExportFilterProvider`). Contrairement à Photoshop, pas besoin de
+   suivre un flux d'événements : à chaque export, on récupère directement
+   `photo:getDevelopSettings()`, l'état final complet des réglages de la
+   photo, pour chaque photo exportée. Un seul appel Lightroom fournit déjà
+   tout le lot exporté ensemble, donc le regroupement par `batchId` est
+   fiable nativement ici (pas l'heuristique à 5 secondes utilisée côté
+   Photoshop). **Un seul zip sert pour tous les photographes** (comme le
+   plugin Photoshop) : l'identifiant du photographe n'est plus en dur dans
+   le code, il est saisi une fois par chacun dans Fichier > Plug-in Manager
+   > "Photo Assistant" (écran ajouté par `PhotoAssistantInfoProvider.lua`,
+   déclaré via `LrPluginInfoProvider` dans `Info.lua`, stocké dans les
+   préférences du plugin avec `LrPrefs`). Installation ensuite en une fois :
+   le photographe ajoute le filtre à son préréglage d'export habituel
+   (boîte de dialogue d'export, section Filtres) — ensuite ça tourne
+   automatiquement à chaque export, aucun clic de plus.
+   **Encore moins vérifié que le plugin Photoshop** : le SDK Lightroom Lua
+   est une surface moins documentée dans mes connaissances, donc plus de
+   risque d'erreur de nom de fonction/champ (`postProcessRenderedPhotos`,
+   `LrTasks.pcall`, etc.) à corriger au premier vrai chargement.
 2. **Apprentissage** (`backend/src/services/parser.js`, `learner.js`) — le
-   backend nettoie les événements bruts en réglages exploitables, puis
-   construit des règles simples (moyenne des réglages par groupe de
-   conditions d'image) à partir des sessions validées.
+   backend nettoie les données brutes des deux sources (événements
+   Photoshop ou réglages finaux Lightroom) en réglages exploitables dans le
+   même format `[{ type, params }]`, puis construit des règles simples
+   (moyenne des réglages par groupe de conditions d'image) à partir des
+   sessions validées.
 3. **Exécution progressive** (`plugin/js/apply.js` + mode dans le panneau) —
    Désactivé / Suggestion (le photographe valide) / Autonome (seulement si
    la permission est activée côté backend). Toujours en pilotant Photoshop
-   via batchPlay, jamais un rendu maison.
+   via batchPlay, jamais un rendu maison. **Pour l'instant seulement côté
+   Photoshop** — appliquer une suggestion dans Lightroom nécessiterait un
+   mécanisme différent (pas encore construit), voir "Reste à faire".
 4. **Boîte de réception centrale** (`backend/src/routes/feedback.js`) — bugs
    signalés à la main, plaintes, suggestions, et erreurs du plugin capturées
    automatiquement, tous envoyés au même endroit pour qu'on les traite.
@@ -64,11 +111,12 @@ réelles**.
   fichiers). Schéma à confirmer au premier chargement réel via UXP
   Developer Tool.
 - `index.html` / `css/style.css` : panneau avec identifiant photographe, URL
-  du serveur, démarrer/arrêter l'enregistrement, sélecteur de mode, bouton
-  de suggestion, zone de signalement de bug, bandeau de mise à jour.
-- `js/main.js` : orchestration complète (enregistrement, envoi au backend,
-  suggestion, mode autonome, signalement, vérification de version, capture
-  automatique des erreurs du plugin).
+  du serveur (pré-remplie avec le backend déployé), statut d'enregistrement
+  automatique + bouton pause optionnel, sélecteur de mode, bouton de
+  suggestion, zone de signalement de bug, bandeau de mise à jour.
+- `js/main.js` : orchestration complète (enregistrement automatique par
+  document/lot, envoi au backend, suggestion, mode autonome, signalement,
+  vérification de version, capture automatique des erreurs du plugin).
 - `js/api.js` : tous les appels réseau vers le backend.
 - `js/apply.js` : applique réellement des réglages Photoshop (exposition,
   teinte/saturation, balance des couleurs) via batchPlay. **Les noms exacts
@@ -103,29 +151,21 @@ maillon n'est pas branché : il faut ajouter au plugin un export d'aperçu de
 l'image (avant retouche) envoyé au backend, qui appellera alors
 `featureExtraction.js` dessus.
 
-## Comment démarrer une vraie phase de test
+## Déploiement : FAIT le 23/09/2026
 
-Le backend est préparé pour être déployé sur **Vercel** (`backend/vercel.json`
-+ `backend/api/index.js`) et stocker dans **Supabase**, les deux outils déjà
-utilisés pour ViralRemix, pour éviter de créer de nouveaux comptes/outils.
+Backend déployé sur Vercel, connecté à un projet Supabase, les deux vérifiés
+en direct (`/health` répond `{"ok":true}`, `/api/permissions/...` confirme
+que Supabase répond bien). URL stable de production :
+**`https://photo-ai-assistant.vercel.app`** (déjà pré-remplie dans
+`plugin/index.html`, le photographe n'a rien à configurer).
 
-Étapes côté Joseph (nécessitent ses propres comptes, ne peuvent pas être
-faites à sa place) :
+Dépôt GitHub : `github.com/Gbjosephkw/photo-ai-assistant`, connecté à Vercel
+(chaque push sur `main` redéploie automatiquement le dossier `backend/`).
+Protection d'accès Vercel ("Vercel Authentication") désactivée pour ce
+projet, sinon l'API n'était joignable que par Joseph connecté à son compte
+Vercel — sans ça le plugin ne pouvait rien envoyer.
 
-1. Créer un nouveau projet Supabase (ou un nouveau schéma dans un projet
-   existant), exécuter `backend/src/db/schema.sql` dans l'éditeur SQL.
-2. Créer un nouveau projet Vercel pointant sur `backend/` (racine du projet =
-   `backend/`), renseigner les variables d'environnement `SUPABASE_URL` et
-   `SUPABASE_SERVICE_ROLE_KEY` dans les réglages Vercel (voir `.env.example`).
-   Déployer. Noter l'URL obtenue (ex. `https://photo-assistant-xxx.vercel.app`).
-3. Ouvrir `plugin/index.html`, remplacer `URL_BACKEND_A_REMPLACER` (valeur par
-   défaut du champ "Serveur") par cette vraie URL, pour que le photographe
-   n'ait rien à configurer lui-même.
-4. Compresser le dossier `plugin/` en `.zip` et l'envoyer au photographe
-   (WhatsApp, Telegram, email... aucune contrainte, ce sont juste des
-   fichiers texte, pas un exécutable).
-
-Étapes côté photographe :
+Étapes côté photographe pour installer le plugin :
 
 1. Installer Adobe Creative Cloud Desktop si pas déjà fait, puis dedans
    installer "UXP Developer Tool" (gratuit, dans la liste des apps Adobe).
@@ -135,28 +175,70 @@ faites à sa place) :
    `manifest.json` dans le dossier dézippé, puis "Load".
 4. Le panneau "Photo Assistant" apparaît dans Photoshop (Fenêtre > Extensions
    ou Plugins selon la version). Il renseigne juste son prénom dans le champ
-   "Photographe", l'URL est déjà pré-remplie.
-5. Démarrer l'enregistrement avant une retouche, l'arrêter une fois la photo
-   exportée. Répéter sur plusieurs photos.
+   "Photographe" — l'enregistrement démarre tout seul, rien d'autre à faire.
 
 **Premiers tests réels** : corriger ce qui casse (il y aura sûrement des
-corrections, ce premier jet n'a jamais tourné dans un vrai Photoshop). Les
-bugs remontent automatiquement ou via le bouton "Signaler un problème" dans
-la table `plugin_feedback` de Supabase.
+corrections, ce code n'a jamais tourné dans un vrai Photoshop). Les bugs
+remontent automatiquement ou via le bouton "Signaler un problème" dans la
+table `plugin_feedback` de Supabase.
 
-Une fois la capture fiable : brancher l'export d'aperçu image → feature
-extraction, pour que les suggestions deviennent réellement possibles (voir
-"Trou connu dans la chaîne" ci-dessus).
+### Installation du plugin Lightroom chez le photographe
 
-## Reste à faire (au-delà du test initial)
+1. Fichier > Plug-in Manager (Gestionnaire de modules externes) > "Ajouter"
+   → sélectionner le dossier `PhotoAssistant.lrplugin`.
+2. Toujours dans le Plug-in Manager, sélectionner "Photo Assistant" dans la
+   liste à gauche → un écran de configuration apparaît → il renseigne son
+   prénom (l'URL du serveur est déjà pré-remplie). Cette étape ne se fait
+   qu'une seule fois.
+3. Ouvrir la boîte de dialogue d'export habituelle (celle que le
+   photographe utilise déjà pour exporter son travail), section "Filtres
+   d'export" (Export Filters) en bas à gauche de la fenêtre → "Photo
+   Assistant (apprentissage)" doit apparaître dans la liste des filtres
+   disponibles, l'ajouter.
+4. Sauvegarder ce préréglage d'export (s'il ne le fait pas déjà à chaque
+   export). Une fois fait, **aucune autre action requise** : chaque futur
+   export avec ce préréglage envoie automatiquement les photos exportées
+   au backend.
 
-- Confirmer avec le photographe pilote s'il travaille sur Photoshop,
-  Lightroom, ou les deux (Lightroom = SDK différent, en Lua).
-- Détection de visage/peau réelle (service de vision à choisir).
-- Export d'aperçu image côté plugin, branché sur `featureExtraction.js`.
-- Table `learned_rules` pré-calculée si le volume de données grossit (pour
-  ne pas recalculer les règles à chaque appel de `/api/suggestions`).
-- Interface simple pour consulter `plugin_feedback` (pour l'instant
-  consultable via l'API ou directement dans Supabase).
-- Publication sur la marketplace Adobe une fois stabilisé, pour un vrai
-  déploiement automatique des mises à jour.
+## Reste à faire — par ordre de priorité pour le premier vrai test
+
+1. **Charger réellement les deux plugins chez les deux photographes qui ont
+   déjà confirmé utiliser Lightroom (23/09/2026)** et corriger ce qui casse
+   — aucun des deux plugins n'a jamais tourné dans un vrai Photoshop ou
+   Lightroom, le plugin Lightroom en particulier repose sur un SDK Lua
+   moins bien connu, donc plus susceptible d'erreurs de nom de fonction/champ
+   à corriger au premier chargement (`postProcessRenderedPhotos`,
+   `LrTasks.pcall`, `photo:getDevelopSettings()`...).
+2. **Vérifier si l'un des deux photographes utilise aussi Photoshop** en
+   plus de Lightroom pour de la retouche plus fine (visage, peau) — auquel
+   cas les deux plugins seraient utiles pour lui ; sinon le plugin Photoshop
+   n'aura peut-être pas d'utilité pour ces deux premiers testeurs
+   spécifiquement, mais reste utile pour d'éventuels futurs clients
+   Photoshop-only.
+3. **Vérifier comment un export groupé Photoshop se comporte réellement**
+   (question résolue nativement côté Lightroom, voir ci-dessus) : notre
+   capture par document suppose qu'exporter plusieurs photos d'un coup
+   déclenche quand même un événement Photoshop par photo. Si un seul
+   événement global est déclenché sans distinction par photo, il faudra
+   adapter `plugin/js/main.js`. Le filet de sécurité par inactivité (3 min)
+   limite les dégâts en attendant, mais ne remplace pas une vérification
+   réelle.
+4. Détection de visage/peau réelle (service de vision à choisir) — utile
+   pour les deux sources.
+5. Export d'aperçu image côté plugin Photoshop, branché sur
+   `featureExtraction.js` (Lightroom fournit déjà les réglages complets
+   sans avoir besoin d'un aperçu pixel séparé pour ça).
+6. Exploiter `batch_id` dans `learner.js` : séparer, au sein d'un même lot,
+   les réglages identiques sur toutes les photos (= le preset de base) des
+   réglages propres à chaque photo (= la retouche individuelle du
+   photographe) — c'est cette seconde partie qui est la plus intéressante à
+   apprendre, et c'est maintenant fiable côté Lightroom (regroupement natif
+   par export) même si encore approximatif côté Photoshop (heuristique 5s).
+7. Mode suggestion/autonome pour Lightroom (pas encore construit, seul
+   `plugin/js/apply.js` côté Photoshop existe pour l'instant).
+8. Table `learned_rules` pré-calculée si le volume de données grossit (pour
+   ne pas recalculer les règles à chaque appel de `/api/suggestions`).
+9. Interface simple pour consulter `plugin_feedback` (pour l'instant
+   consultable via l'API ou directement dans Supabase).
+10. Publication sur la marketplace Adobe une fois stabilisé, pour un vrai
+    déploiement automatique des mises à jour.

@@ -41,4 +41,15 @@ function isValidationEvent(entry) {
   return ["exportDocument", "save", "saveAs", "flattenImage"].includes(entry.event);
 }
 
-module.exports = { parseSessionEvents, isValidationEvent };
+// Lightroom ne donne pas un journal d'événements comme Photoshop : à
+// l'export, on récupère directement l'état final des réglages de
+// développement de la photo (photo:getDevelopSettings() côté plugin Lua).
+// On le range dans la même forme [{ type, params }] que parseSessionEvents
+// pour que learner.js (qui moyenne les champs numériques de params) marche
+// sans changement pour les deux sources.
+function parseLightroomSettings(developSettings) {
+  if (!developSettings || typeof developSettings !== "object") return [];
+  return [{ type: "lightroomDevelop", params: developSettings }];
+}
+
+module.exports = { parseSessionEvents, isValidationEvent, parseLightroomSettings };
