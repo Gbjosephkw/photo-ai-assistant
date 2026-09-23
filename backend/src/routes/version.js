@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { supabase } = require("../db/supabaseClient");
+const { requireAdmin } = require("../middleware/adminAuth");
 
 // Sert le modèle "mise à jour téléphone" : le plugin, au démarrage,
 // compare sa propre version (manifest.json) à la dernière version publiée
@@ -34,7 +35,7 @@ router.get("/latest", async (_req, res) => {
 
 // Enregistre une nouvelle version publiée (à appeler depuis chez nous
 // quand on corrige quelque chose et qu'on renvoie le plugin mis à jour).
-router.post("/", async (req, res) => {
+router.post("/", requireAdmin, async (req, res) => {
   const { version, releaseNotes } = req.body;
   if (!version) return res.status(400).json({ error: "version manquant" });
 

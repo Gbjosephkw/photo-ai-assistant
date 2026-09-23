@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { supabase } = require("../db/supabaseClient");
+const { requireAdmin } = require("../middleware/adminAuth");
 
 router.get("/:photographerId", async (req, res) => {
   const { photographerId } = req.params;
@@ -19,8 +20,9 @@ router.get("/:photographerId", async (req, res) => {
 
 // Le photographe (ou nous, en son nom, sur sa demande explicite) active ou
 // désactive le mode autonome. Ne doit jamais être appelé automatiquement
-// par l'assistant lui-même, seulement suite à une action humaine.
-router.post("/:photographerId", async (req, res) => {
+// par l'assistant lui-même, seulement suite à une action humaine — d'où la
+// protection admin (page admin uniquement, pas le plugin).
+router.post("/:photographerId", requireAdmin, async (req, res) => {
   const { photographerId } = req.params;
   const { autonomousEnabled } = req.body;
 

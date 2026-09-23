@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Photo Assistant — Admin</title>
+<style>
+  body { font-family: -apple-system, sans-serif; background: #1a1a1a; color: #eee; margin: 0; padding: 20px; }
+  h1 { font-size: 20px; margin: 0 0 4px 0; }
+  h2 { font-size: 15px; margin: 30px 0 10px 0; border-bottom: 1px solid #444; padding-bottom: 6px; }
+  .sub { color: #999; font-size: 12px; margin-bottom: 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #333; }
+  th { color: #aaa; font-weight: normal; }
+  tr:hover { background: #232323; }
+  .badge { padding: 2px 6px; border-radius: 3px; font-size: 11px; }
+  .badge-photoshop { background: #2d4a6b; }
+  .badge-lightroom { background: #6b2d4a; }
+  .badge-yes { background: #2d6b3a; }
+  .badge-no { background: #444; }
+  button { background: #333; color: #eee; border: 1px solid #555; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+  button:hover { background: #444; }
+  input { background: #262626; color: #eee; border: 1px solid #555; padding: 6px; border-radius: 4px; font-size: 13px; }
+  .row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+  #gate { max-width: 320px; margin: 100px auto; text-align: center; }
+  #gate input { width: 100%; box-sizing: border-box; margin-bottom: 10px; }
+  #app { display: none; }
+  .empty { color: #777; font-style: italic; padding: 10px 0; }
+  .err { color: #e88; font-size: 12px; margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <h1>Photo Assistant — Admin</h1>
+  <p class="sub">Entre le code d'accès admin</p>
+  <input id="tokenInput" type="password" placeholder="Code d'accès">
+  <button id="btnEnter">Entrer</button>
+  <div id="gateErr" class="err"></div>
+</div>
+
+<div id="app">
+  <h1>Photo Assistant — Admin</h1>
+  <div class="sub">Espace admin. <button id="btnLogout">Se déconnecter</button></div>
+
+  <h2>Connexions (checkins)</h2>
+  <div id="checkinsBox"><div class="empty">Chargement...</div></div>
+
+  <h2>Retouches reçues (sessions)</h2>
+  <div id="sessionsBox"><div class="empty">Chargement...</div></div>
+
+  <h2>Boîte de réception (bugs / plaintes / suggestions / erreurs)</h2>
+  <div id="feedbackBox"><div class="empty">Chargement...</div></div>
+
+  <h2>Mode autonome par photographe</h2>
+  <div class="row">
+    <input id="permPhotographerId" placeholder="identifiant du photographe">
+    <button id="btnPermCheck">Vérifier</button>
+    <button id="btnPermEnable">Activer</button>
+    <button id="btnPermDisable">Désactiver</button>
+    <span id="permStatus"></span>
+  </div>
+
+  <h2>Publier une nouvelle version de plugin</h2>
+  <div class="row">
+    <input id="versionInput" placeholder="ex: 1.1.0">
+    <input id="versionNotes" placeholder="notes (optionnel)" style="flex:1; min-width:200px;">
+    <button id="btnPublishVersion">Publier</button>
+  </div>
+  <div id="versionStatus" class="sub"></div>
+</div>
+
+<script>
+const BACKEND_URL = window.location.origin;
+
+function getToken() { return localStorage.getItem("pa_admin_token") || ""; }
+function setToken(t) { localStorage.setItem("pa_admin_token", t); }
+function clearToken() { localStorage.removeItem("pa_admin_token"); }
+
+async function adminFetch(path, options) {
+  options = options || {};
+  options.headers = Object.assign({}, options.headers, {
+    "x-admin-token": getToken(),
+    "Content-Type": "application/json"
+  });
+  const res = await fetch(BACKEND_URL + path, options);
+  if (res.status === 401) throw new Error("Code d'accès invalide.");
+  if (!res.ok) throw new Error("Erreur serveur (" + res.status + ")");
+  return res.json();
+}
+
+function fmtDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleString("fr-FR");
+}
+
+function sourceBadge(source) {
+  const cls = source === "lightroom" ? "badge-lightroom" : "badge-photoshop";
+  return '<span class="badge ' + cls + '">' + (source || "photoshop") + '</span>';
+}
+
+async function loadCheckins() {
+  const box = document.getElementById("checkinsBox");
+  try {
+    const rows = await adminFetch("/api/checkin");
+    if (rows.length === 0) { box.innerHTML = '<div class="empty">Personne ne s\'est encore connecté.</div>'; return; }
+    let html = "<table><tr><th>Photographe</th><th>Source</th><th>Version</th><th>Date</th></tr>";
+    rows.forEach(r => {
+      html += "<tr><td>" + r.photographer_id + "</td><td>" + sourceBadge(r.source) + "</td><td>" + (r.plugin_version || "") + "</td><td>" + fmtDate(r.created_at) + "</td></tr>";
+    });
+    html += "</table>";
+    box.innerHTML = html;
+  } catch (err) {
+    box.innerHTML = '<div class="err">' + err.message + '</div>';
+  }
+}
+
+async function loadSessions() {
+  const box = document.getElementById("sessionsBox");
+  try {
+    const rows = await adminFetch("/api/admin/sessions");
+    if (rows.length === 0) { box.innerHTML = '<div class="empty">Aucune retouche reçue pour l\'instant.</div>'; return; }
+    let html = "<table><tr><th>Photographe</th><th>Source</th><th>Lot</th><th>Réglages</th><th>Validée</th><th>Date</th></tr>";
+    rows.forEach(r => {
+      const adjCount = Array.isArray(r.adjustments) ? r.adjustments.length : 0;
+      html += "<tr><td>" + r.photographer_id + "</td><td>" + sourceBadge(r.source) + "</td><td style='font-size:11px;color:#888'>" + (r.batch_id || "") + "</td><td>" + adjCount + "</td><td><span class='badge " + (r.validated ? "badge-yes" : "badge-no") + "'>" + (r.validated ? "oui" : "non") + "</span></td><td>" + fmtDate(r.created_at) + "</td></tr>";
+    });
+    html += "</table>";
+    box.innerHTML = html;
+  } catch (err) {
+    box.innerHTML = '<div class="err">' + err.message + '</div>';
+  }
+}
+
+async function loadFeedback() {
+  const box = document.getElementById("feedbackBox");
+  try {
+    const rows = await adminFetch("/api/feedback");
+    if (rows.length === 0) { box.innerHTML = '<div class="empty">Rien dans la boîte de réception.</div>'; return; }
+    let html = "<table><tr><th>Type</th><th>Photographe</th><th>Message</th><th>Résolu</th><th>Date</th><th></th></tr>";
+    rows.forEach(r => {
+      html += "<tr><td>" + r.type + "</td><td>" + (r.photographer_id || "") + "</td><td>" + (r.message || "") + "</td><td><span class='badge " + (r.resolved ? "badge-yes" : "badge-no") + "'>" + (r.resolved ? "oui" : "non") + "</span></td><td>" + fmtDate(r.created_at) + "</td><td>" + (r.resolved ? "" : "<button data-id='" + r.id + "' class='btnResolve'>Marquer résolu</button>") + "</td></tr>";
+    });
+    html += "</table>";
+    box.innerHTML = html;
+    box.querySelectorAll(".btnResolve").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        await adminFetch("/api/feedback/" + btn.dataset.id + "/resolve", { method: "POST" });
+        loadFeedback();
+      });
+    });
+  } catch (err) {
+    box.innerHTML = '<div class="err">' + err.message + '</div>';
+  }
+}
+
+document.getElementById("btnPermCheck").addEventListener("click", async () => {
+  const id = document.getElementById("permPhotographerId").value.trim();
+  const statusEl = document.getElementById("permStatus");
+  if (!id) return;
+  try {
+    const res = await fetch(BACKEND_URL + "/api/permissions/" + encodeURIComponent(id));
+    const data = await res.json();
+    statusEl.textContent = "Mode autonome : " + (data.autonomousEnabled ? "activé" : "désactivé");
+  } catch (err) {
+    statusEl.textContent = "Erreur : " + err.message;
+  }
+});
+
+async function setPermission(enabled) {
+  const id = document.getElementById("permPhotographerId").value.trim();
+  const statusEl = document.getElementById("permStatus");
+  if (!id) { statusEl.textContent = "Renseigne un identifiant de photographe."; return; }
+  try {
+    await adminFetch("/api/permissions/" + encodeURIComponent(id), {
+      method: "POST",
+      body: JSON.stringify({ autonomousEnabled: enabled })
+    });
+    statusEl.textContent = "Mode autonome : " + (enabled ? "activé" : "désactivé");
+  } catch (err) {
+    statusEl.textContent = "Erreur : " + err.message;
+  }
+}
+document.getElementById("btnPermEnable").addEventListener("click", () => setPermission(true));
+document.getElementById("btnPermDisable").addEventListener("click", () => setPermission(false));
+
+document.getElementById("btnPublishVersion").addEventListener("click", async () => {
+  const version = document.getElementById("versionInput").value.trim();
+  const notes = document.getElementById("versionNotes").value.trim();
+  const statusEl = document.getElementById("versionStatus");
+  if (!version) { statusEl.textContent = "Renseigne un numéro de version."; return; }
+  try {
+    await adminFetch("/api/version", {
+      method: "POST",
+      body: JSON.stringify({ version, releaseNotes: notes })
+    });
+    statusEl.textContent = "Version " + version + " publiée.";
+  } catch (err) {
+    statusEl.textContent = "Erreur : " + err.message;
+  }
+});
+
+function loadAll() {
+  loadCheckins();
+  loadSessions();
+  loadFeedback();
+}
+
+function showApp() {
+  document.getElementById("gate").style.display = "none";
+  document.getElementById("app").style.display = "block";
+  loadAll();
+}
+
+document.getElementById("btnEnter").addEventListener("click", async () => {
+  const val = document.getElementById("tokenInput").value.trim();
+  if (!val) return;
+  setToken(val);
+  try {
+    await adminFetch("/api/checkin");
+    showApp();
+  } catch (err) {
+    clearToken();
+    document.getElementById("gateErr").textContent = "Code d'accès invalide.";
+  }
+});
+
+document.getElementById("btnLogout").addEventListener("click", () => {
+  clearToken();
+  document.getElementById("app").style.display = "none";
+  document.getElementById("gate").style.display = "block";
+});
+
+if (getToken()) {
+  adminFetch("/api/checkin").then(showApp).catch(() => clearToken());
+}
+</script>
+</body>
+</html>

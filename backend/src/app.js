@@ -1,4 +1,5 @@
 require("dotenv").config();
+const path = require("path");
 const express = require("express");
 const cors = require("cors");
 
@@ -9,6 +10,7 @@ const photographersRouter = require("./routes/photographers");
 const feedbackRouter = require("./routes/feedback");
 const versionRouter = require("./routes/version");
 const checkinRouter = require("./routes/checkin");
+const adminSessionsRouter = require("./routes/adminSessions");
 
 const app = express();
 app.use(cors());
@@ -23,5 +25,11 @@ app.use("/api/photographers", photographersRouter);
 app.use("/api/feedback", feedbackRouter);
 app.use("/api/version", versionRouter);
 app.use("/api/checkin", checkinRouter);
+app.use("/api/admin/sessions", adminSessionsRouter);
+
+// Page admin statique (backend/public/admin.html), protégée côté API par
+// un code d'accès (voir middleware/adminAuth.js) — la page elle-même est
+// servie librement, mais n'affiche rien sans le bon code.
+app.use(express.static(path.join(__dirname, "..", "public")));
 
 module.exports = app;

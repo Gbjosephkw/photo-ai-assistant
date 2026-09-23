@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { supabase } = require("../db/supabaseClient");
+const { requireAdmin } = require("../middleware/adminAuth");
 
 // Point d'entrée unique où arrive TOUT ce qui vient des plugins installés
 // chez les photographes testeurs : bug signalé manuellement, plainte,
@@ -33,9 +34,8 @@ router.post("/", async (req, res) => {
   res.json({ ok: true, id: data.id });
 });
 
-// Liste le contenu de la boîte de réception (pour un tableau de bord futur ;
-// pour l'instant, consultable directement via Supabase ou cette route).
-router.get("/", async (req, res) => {
+// Liste le contenu de la boîte de réception (page admin).
+router.get("/", requireAdmin, async (req, res) => {
   const { photographerId, type, resolved } = req.query;
 
   let query = supabase.from("plugin_feedback").select("*").order("created_at", { ascending: false });
@@ -48,7 +48,7 @@ router.get("/", async (req, res) => {
   res.json(data);
 });
 
-router.post("/:id/resolve", async (req, res) => {
+router.post("/:id/resolve", requireAdmin, async (req, res) => {
   const { id } = req.params;
   const { error } = await supabase
     .from("plugin_feedback")

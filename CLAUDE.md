@@ -103,6 +103,18 @@ une fois le produit stabilisé avec les premiers testeurs, pas dès maintenant.
    Manager), sans attendre un premier export réel. Permet de savoir qui
    s'est installé/connecté avant même le premier test complet — demande
    explicite de Joseph (23/09/2026).
+7. **Page admin** (`backend/public/admin.html`, servie sur
+   `https://photo-ai-assistant.vercel.app/admin.html`) — vue d'ensemble :
+   connexions récentes, retouches reçues (avec lot/source/validée), boîte
+   de réception (avec bouton "marquer résolu"), activation du mode
+   autonome par photographe, publication d'une nouvelle version de plugin.
+   Protégée par un code d'accès unique (variable d'environnement Vercel
+   `ADMIN_TOKEN`, à définir — voir `.env.example`), saisi une fois dans le
+   navigateur et gardé en `localStorage`. Ce n'est pas un vrai système de
+   comptes, juste une protection simple adaptée à un seul admin (Joseph).
+   Testé en local avec un serveur Node temporaire avant déploiement
+   (page servie, 401 sans code, passe avec le bon code) — jamais testé sur
+   le vrai déploiement Vercel au moment de l'écriture de cette note.
 
 ## État actuel : conçu et codé dans son ensemble, RIEN n'est testé en réel
 

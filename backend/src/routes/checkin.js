@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { supabase } = require("../db/supabaseClient");
+const { requireAdmin } = require("../middleware/adminAuth");
 
 // Signal "quelqu'un a ouvert/configuré le plugin", envoyé dès le chargement
 // (Photoshop) ou dès que le photographe renseigne son prénom (Lightroom),
@@ -22,9 +23,8 @@ router.post("/", async (req, res) => {
   res.json({ ok: true });
 });
 
-// Liste les connexions récentes (pour que Joseph — ou une session future —
-// puisse voir qui s'est connecté, depuis quel plugin, quand).
-router.get("/", async (_req, res) => {
+// Liste les connexions récentes (page admin).
+router.get("/", requireAdmin, async (_req, res) => {
   const { data, error } = await supabase
     .from("plugin_checkins")
     .select("*")
