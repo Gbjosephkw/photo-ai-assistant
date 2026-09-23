@@ -5,17 +5,62 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <h3>Photo Assistant — Enregistreur</h3>
+  <h3>Photo Assistant</h3>
+  <div id="updateBanner" class="update-banner" hidden></div>
+
+  <div class="field">
+    <label for="photographerId">Photographe</label>
+    <input id="photographerId" type="text" placeholder="ex: karamo-01">
+  </div>
+
+  <div class="field">
+    <label for="backendUrl">Serveur</label>
+    <input id="backendUrl" type="text" value="URL_BACKEND_A_REMPLACER">
+  </div>
+
   <div id="status">Statut : arrêté</div>
+  <div id="permissionStatus">Mode autonome : désactivé</div>
 
   <div class="buttons">
     <button id="btnStart">Démarrer l'enregistrement</button>
-    <button id="btnStop">Arrêter et sauvegarder</button>
+    <button id="btnStop">Arrêter et envoyer</button>
   </div>
+
+  <hr>
+
+  <div class="field">
+    <label for="modeSelect">Mode assistant</label>
+    <select id="modeSelect">
+      <option value="off">Désactivé</option>
+      <option value="suggest">Suggestion (je valide)</option>
+      <option value="auto">Autonome (si autorisé)</option>
+    </select>
+  </div>
+  <button id="btnSuggest">Proposer un réglage pour l'image active</button>
+  <div id="suggestionBox"></div>
+  <button id="btnApplySuggestion" hidden>Appliquer la suggestion</button>
+
+  <hr>
 
   <div id="counter">0 actions capturées</div>
   <div id="log"></div>
 
+  <hr>
+
+  <div class="field">
+    <label for="feedbackType">Signaler un problème</label>
+    <select id="feedbackType">
+      <option value="bug">Bug</option>
+      <option value="complaint">Plainte / ça ne me convient pas</option>
+      <option value="suggestion">Suggestion</option>
+    </select>
+  </div>
+  <textarea id="feedbackMessage" placeholder="Décris ce qui ne va pas ou ce que tu aimerais..."></textarea>
+  <button id="btnSendFeedback">Envoyer</button>
+  <div id="feedbackStatus"></div>
+
+  <script src="js/api.js"></script>
+  <script src="js/apply.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>
