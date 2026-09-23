@@ -96,6 +96,13 @@ une fois le produit stabilisé avec les premiers testeurs, pas dès maintenant.
    automatiquement, tous envoyés au même endroit pour qu'on les traite.
 5. **Vérification de version** (`backend/src/routes/version.js`) — le plugin
    compare sa version à la dernière publiée et prévient le photographe.
+6. **Signal de connexion** (`backend/src/routes/checkin.js`, table
+   `plugin_checkins`) — envoyé dès que le photographe renseigne son prénom
+   (Photoshop : au chargement du panneau si déjà rempli, et à chaque
+   modification du champ ; Lightroom : dès la saisie dans le Plug-in
+   Manager), sans attendre un premier export réel. Permet de savoir qui
+   s'est installé/connecté avant même le premier test complet — demande
+   explicite de Joseph (23/09/2026).
 
 ## État actuel : conçu et codé dans son ensemble, RIEN n'est testé en réel
 

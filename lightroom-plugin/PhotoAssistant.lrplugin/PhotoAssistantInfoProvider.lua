@@ -7,10 +7,32 @@
 
 local LrView = import 'LrView'
 local LrPrefs = import 'LrPrefs'
+local LrTasks = import 'LrTasks'
+local LrHttp = import 'LrHttp'
+local json = require 'json'
 
 local prefs = LrPrefs.prefsForPlugin()
 
 local infoProvider = {}
+
+-- Signale "quelqu'un a configuré le plugin", dès que le prénom est
+-- renseigné, sans attendre un premier export réel (voir CLAUDE.md, checkin).
+local function sendCheckIn(photographerId, backendUrl)
+  if photographerId == nil or photographerId == "" then return end
+  LrTasks.startAsyncTask(function()
+    LrTasks.pcall(function()
+      local body = json.encode({
+        photographerId = photographerId,
+        source = "lightroom",
+      })
+      LrHttp.post(
+        backendUrl .. "/api/checkin",
+        body,
+        { { field = "Content-Type", value = "application/json" } }
+      )
+    end)
+  end)
+end
 
 function infoProvider.sectionsForTopOfDialog(f, propertyTable)
   propertyTable.photographerId = prefs.photographerId or ""
@@ -18,6 +40,7 @@ function infoProvider.sectionsForTopOfDialog(f, propertyTable)
 
   propertyTable:addObserver('photographerId', function(_, _, value)
     prefs.photographerId = value
+    sendCheckIn(value, propertyTable.backendUrl)
   end)
   propertyTable:addObserver('backendUrl', function(_, _, value)
     prefs.backendUrl = value

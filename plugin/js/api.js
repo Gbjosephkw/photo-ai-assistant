@@ -65,3 +65,18 @@ async function fetchLatestVersion() {
   if (!res.ok) throw new Error("Vérification de version échouée : " + res.status);
   return res.json();
 }
+
+async function sendCheckIn() {
+  const photographerId = getPhotographerId();
+  if (!photographerId) return; // pas encore renseigné, rien à signaler
+  const url = getBackendUrl() + "/api/checkin";
+  await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      photographerId,
+      source: "photoshop",
+      pluginVersion: PLUGIN_VERSION
+    })
+  });
+}

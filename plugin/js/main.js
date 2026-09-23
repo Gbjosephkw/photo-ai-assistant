@@ -345,6 +345,13 @@ btnPause.addEventListener("click", togglePause);
 btnSuggest.addEventListener("click", requestSuggestion);
 modeSelect.addEventListener("change", refreshPermission);
 
+// Signale "quelqu'un a ouvert le plugin" dès que le prénom est renseigné,
+// sans attendre un premier export réel (voir CLAUDE.md, checkin).
+const photographerIdInput = document.getElementById("photographerId");
+photographerIdInput.addEventListener("change", () => {
+  sendCheckIn();
+});
+
 // L'enregistrement démarre tout seul dès que le panneau est chargé, pas
 // besoin d'action du photographe.
 setStatus("actif (automatique)");
@@ -352,4 +359,5 @@ registerAlreadyOpenDocuments();
 updateCounter();
 appendLog("Enregistrement automatique actif — retouche normalement, chaque export est envoyé tout seul.");
 
+sendCheckIn(); // au cas où le champ est déjà pré-rempli au chargement
 checkForUpdate();

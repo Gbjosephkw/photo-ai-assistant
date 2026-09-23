@@ -92,3 +92,16 @@ create table if not exists plugin_versions (
   release_notes text,
   released_at timestamptz default now()
 );
+
+-- Signal "quelqu'un a ouvert/configuré le plugin" (chargement du panneau
+-- Photoshop, ou saisie du prénom dans le Plug-in Manager Lightroom), pour
+-- savoir qui s'est connecté sans attendre un premier export réel.
+create table if not exists plugin_checkins (
+  id uuid primary key default gen_random_uuid(),
+  photographer_id text not null,
+  source text default 'photoshop',
+  plugin_version text,
+  created_at timestamptz default now()
+);
+
+create index if not exists idx_plugin_checkins_photographer on plugin_checkins(photographer_id);

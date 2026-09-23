@@ -8,6 +8,7 @@ const permissionsRouter = require("./routes/permissions");
 const photographersRouter = require("./routes/photographers");
 const feedbackRouter = require("./routes/feedback");
 const versionRouter = require("./routes/version");
+const checkinRouter = require("./routes/checkin");
 
 const app = express();
 app.use(cors());
@@ -21,5 +22,6 @@ app.use("/api/permissions", permissionsRouter);
 app.use("/api/photographers", photographersRouter);
 app.use("/api/feedback", feedbackRouter);
 app.use("/api/version", versionRouter);
+app.use("/api/checkin", checkinRouter);
 
 module.exports = app;
