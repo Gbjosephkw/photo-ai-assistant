@@ -41,15 +41,17 @@ function isValidationEvent(entry) {
   return ["exportDocument", "save", "saveAs", "flattenImage"].includes(entry.event);
 }
 
-// Lightroom ne donne pas un journal d'événements comme Photoshop : à
-// l'export, on récupère directement l'état final des réglages de
-// développement de la photo (photo:getDevelopSettings() côté plugin Lua).
+// Ni Lightroom ni Camera Raw ne donnent un journal d'événements comme
+// Photoshop : on récupère directement l'état final des réglages de
+// développement de la photo (photo:getDevelopSettings() côté plugin Lua
+// pour Lightroom ; attributs crs: lus dans le fichier .xmp annexe pour
+// Camera Raw — même moteur de traitement RAW, même schéma de réglages).
 // On le range dans la même forme [{ type, params }] que parseSessionEvents
 // pour que learner.js (qui moyenne les champs numériques de params) marche
-// sans changement pour les deux sources.
+// sans changement, quelle que soit la source.
 function parseLightroomSettings(developSettings) {
   if (!developSettings || typeof developSettings !== "object") return [];
-  return [{ type: "lightroomDevelop", params: developSettings }];
+  return [{ type: "developSettings", params: developSettings }];
 }
 
 module.exports = { parseSessionEvents, isValidationEvent, parseLightroomSettings };

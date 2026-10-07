@@ -10,7 +10,12 @@ pilote l'outil que le photographe utilise déjà.
 
 Produit à vendre (pas un projet perso). Deux photographes contactés par
 Joseph, **les deux utilisent Lightroom** (23/09/2026) — d'où l'existence de
-`lightroom-plugin/` en plus de `plugin/` (Photoshop). Les deux plugins
+`lightroom-plugin/` en plus de `plugin/` (Photoshop). Troisième brique
+ajoutée le 07/10/2026, `camera-raw-watcher/` : un photographe en test ouvre
+ses RAW directement dans Photoshop via Camera Raw (pas Lightroom), et ses
+vrais réglages (exposition, contraste, balance des blancs...) sont gravés
+dans les pixels une fois "Ouvrir" cliqué — invisibles pour le plugin
+Photoshop, qui n'observe que les calques de réglage. Toutes les briques
 envoient vers le même backend.
 
 ## Modèle de fonctionnement choisi par Joseph : "mise à jour téléphone"
@@ -79,9 +84,51 @@ une fois le produit stabilisé avec les premiers testeurs, pas dès maintenant.
    est une surface moins documentée dans mes connaissances, donc plus de
    risque d'erreur de nom de fonction/champ (`postProcessRenderedPhotos`,
    `LrTasks.pcall`, etc.) à corriger au premier vrai chargement.
+1ter. **Surveillance Camera Raw** (`camera-raw-watcher/watch.js`) — pas un
+   plugin, un script Node.js autonome (aucune dépendance externe, juste
+   `fs`/`path`/`fetch` natifs) que le photographe lance à côté de
+   Photoshop. Découvert nécessaire le 07/10/2026 : un photographe ouvre
+   ses RAW directement dans Photoshop via Camera Raw (pas Lightroom), et
+   une fois "Ouvrir" cliqué, ses réglages (exposition, contraste, balance
+   des blancs...) sont gravés dans les pixels d'un calque simple — le
+   plugin Photoshop (qui n'observe que les calques de réglage) ne voit
+   rien. Camera Raw partage le même moteur RAW que Lightroom et écrit (si
+   configuré ainsi, voir plus bas) les mêmes réglages en attributs XML
+   `crs:NomDuReglage="valeur"` dans un fichier `.xmp` à côté de la photo.
+   Le script scanne un dossier en boucle (toutes les 4s), détecte les
+   fichiers `.xmp` nouveaux/modifiés, attend 2s qu'ils soient stables,
+   extrait tous les attributs `crs:` génériquement par expression
+   régulière, et envoie au même `/api/sessions` que les autres sources
+   avec `source: "camera-raw"` (backend traite "lightroom" et
+   "camera-raw" de façon identique, voir `DEVELOP_SETTINGS_SOURCES` dans
+   `sessions.js`). Les photos modifiées à moins de 8s d'écart sont
+   regroupées dans le même `batchId`.
+   **Dépendance stricte à vérifier avec le photographe avant tout test** :
+   Camera Raw doit être réglé sur "Enregistrer les réglages d'image dans
+   > Fichiers .xmp annexes" (pas "Base de données Camera Raw") dans ses
+   préférences — sinon aucun fichier `.xmp` n'est jamais écrit et le
+   script ne voit rien passer. Voir `camera-raw-watcher/LISEZ-MOI.txt`.
+   **Testé en local avant livraison** : extraction XMP validée avec des
+   valeurs réelles observées chez le photographe (Exposition +0,90,
+   Contraste +31, etc., capture d'écran du 07/10/2026), et flux complet
+   bout en bout vérifié contre un serveur local puis contre le vrai
+   backend Vercel déployé (un essai a d'abord échoué avec "events
+   manquant ou vide" parce que le changement backend n'avait pas encore
+   été poussé — corrigé, puis re-testé avec succès). **Jamais testé avec
+   un vrai Camera Raw/XMP généré en conditions réelles** — seulement avec
+   un fichier `.xmp` construit à la main à partir des valeurs vues sur la
+   capture d'écran du photographe, pas un vrai fichier Camera Raw.
+   **Friction connue, différente des plugins** : contrairement à
+   Photoshop/Lightroom qui s'intègrent dans l'application, ce script
+   nécessite Node.js installé sur la machine du photographe (pas toujours
+   le cas) et doit être lancé manuellement avant chaque session de travail
+   (double-clic sur `demarrer.bat`/`demarrer-mac.command`), avec un
+   dossier à surveiller à reconfigurer à chaque nouveau shoot dans
+   `config.json` — pas encore automatisé.
 2. **Apprentissage** (`backend/src/services/parser.js`, `learner.js`) — le
-   backend nettoie les données brutes des deux sources (événements
-   Photoshop ou réglages finaux Lightroom) en réglages exploitables dans le
+   backend nettoie les données brutes des trois sources (événements
+   Photoshop, réglages finaux Lightroom, ou réglages Camera Raw lus en XMP)
+   en réglages exploitables dans le
    même format `[{ type, params }]`, puis construit des règles simples
    (moyenne des réglages par groupe de conditions d'image) à partir des
    sessions validées.

@@ -1,0 +1,40 @@
+Photo Assistant — Surveillance Camera Raw
+===========================================
+
+Ce dossier contient un petit programme qui surveille automatiquement tes
+réglages Camera Raw et les envoie à l'assistant, même si tu n'ouvres
+jamais la photo dans Photoshop.
+
+ÉTAPE 0 — À VÉRIFIER AVANT TOUT (sinon rien ne fonctionnera) :
+----------------------------------------------------------------
+1. Dans Camera Raw, clique sur l'icône d'engrenage (Préférences) en haut
+   à droite de la fenêtre.
+2. Cherche "Enregistrer les réglages d'image dans".
+3. Choisis "Fichiers .xmp annexes" — PAS "Base de données Camera Raw".
+4. Valide.
+Sans ce réglage, Camera Raw n'écrit aucun fichier .xmp à côté de tes
+photos, et ce programme n'a rien à surveiller.
+
+INSTALLATION (une seule fois) :
+--------------------------------
+1. Si Node.js n'est pas déjà installé sur cet ordinateur, télécharge-le
+   sur nodejs.org (version "LTS") et installe-le normalement.
+2. Dans ce dossier, fais une copie du fichier "config.example.json" et
+   renomme la copie en "config.json".
+3. Ouvre "config.json" avec le Bloc-notes (clic droit > Ouvrir avec >
+   Bloc-notes) et remplace :
+   - "photographerId" par ton prénom (entre les guillemets)
+   - "watchFolder" par le chemin du dossier où tu ranges les photos que
+     tu es en train de traiter (exemple : C:\Users\TonNom\Pictures\Shoot2026)
+   Enregistre le fichier.
+
+UTILISATION :
+-------------
+Avant de commencer à retoucher, double-clique sur "demarrer.bat" (sur
+Mac : "demarrer-mac.command"). Une fenêtre noire s'ouvre et doit rester
+ouverte pendant que tu travailles — tu peux la réduire, mais ne la ferme
+pas. Elle affiche "Envoyé : nomdelaphoto.xmp" à chaque fois qu'une photo
+est captée.
+
+Si quelque chose ne va pas, laisse la fenêtre ouverte et envoie une
+capture d'écran de ce qu'elle affiche.
