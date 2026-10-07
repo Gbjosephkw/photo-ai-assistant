@@ -346,11 +346,28 @@ btnSuggest.addEventListener("click", requestSuggestion);
 modeSelect.addEventListener("change", refreshPermission);
 
 // Signale "quelqu'un a ouvert le plugin" dès que le prénom est renseigné,
-// sans attendre un premier export réel (voir CLAUDE.md, checkin).
+// sans attendre un premier export réel (voir CLAUDE.md, checkin). En plus
+// de l'envoi automatique au changement de champ (pas toujours fiable selon
+// l'environnement), un bouton "Enregistrer" explicite avec confirmation
+// visuelle évite toute ambiguïté sur le fait que c'est bien pris en compte.
 const photographerIdInput = document.getElementById("photographerId");
+const identityStatus = document.getElementById("identityStatus");
+const btnSaveIdentity = document.getElementById("btnSaveIdentity");
+
+async function saveIdentity() {
+  identityStatus.textContent = "Connexion en cours...";
+  try {
+    await sendCheckIn();
+    identityStatus.textContent = "✓ Enregistré — connecté au serveur.";
+  } catch (err) {
+    identityStatus.textContent = "✗ " + err.message;
+  }
+}
+
 photographerIdInput.addEventListener("change", () => {
-  sendCheckIn();
+  saveIdentity();
 });
+btnSaveIdentity.addEventListener("click", saveIdentity);
 
 // L'enregistrement démarre tout seul dès que le panneau est chargé, pas
 // besoin d'action du photographe.
@@ -359,5 +376,4 @@ registerAlreadyOpenDocuments();
 updateCounter();
 appendLog("Enregistrement automatique actif — retouche normalement, chaque export est envoyé tout seul.");
 
-sendCheckIn(); // au cas où le champ est déjà pré-rempli au chargement
 checkForUpdate();

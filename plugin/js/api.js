@@ -68,9 +68,9 @@ async function fetchLatestVersion() {
 
 async function sendCheckIn() {
   const photographerId = getPhotographerId();
-  if (!photographerId) return; // pas encore renseigné, rien à signaler
+  if (!photographerId) throw new Error("Renseigne d'abord ton prénom.");
   const url = getBackendUrl() + "/api/checkin";
-  await fetch(url, {
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -79,4 +79,5 @@ async function sendCheckIn() {
       pluginVersion: PLUGIN_VERSION
     })
   });
+  if (!res.ok) throw new Error("Connexion au serveur échouée : " + res.status);
 }
